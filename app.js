@@ -191,93 +191,46 @@ function openTrash(){
   renderDocs();
 }
 
-// ---------- IMPORT CARTELLA CON CLASSIFICAZIONE IA ----------
-// L'archivio reale non ha una struttura fissa: a volte la cartella di primo
-// livello è già la categoria ("IDONEITA' SANITARIA/Mario Rossi.pdf"), a volte
-// è un raggruppamento con dentro le cartelle delle singole persone
-// ("ARTIGIANI/OLEG/BILIANSKI IVAN/VISITA MEDICA.pdf"). Per questo si manda
-// all'IA l'INTERO percorso (tutte le cartelle, non solo quella immediata) e
-// si lascia decidere sia la categoria sia il nome della persona.
-// Se dal solo nome file+percorso l'IA non è sicura, si rifà la richiesta
-// allegando il file stesso (foto/PDF): a quel punto lo apre e lo legge
-// davvero, invece di indovinare dal nome.
+// ---------- IMPORT CARTELLA: RISPECCHIA LA STRUTTURA DELLO ZIP, SENZA IA ----------
+// Nessuna chiamata esterna, nessuna classificazione "intelligente": la cartella
+// di primo livello nello zip/nella cartella trascinata DIVENTA la sezione
+// (categoria). Se una sezione con quel nome esiste già (anche solo simile,
+// es. maiuscole/minuscole o spazi diversi) i file finiscono lì; altrimenti la
+// sezione viene creata al volo con lo stesso nome della cartella.
 
-// Cloud Function unificata (progetto functions gama-service-functions),
-// endpoint "classificaDocumentoAI". Usa lo stesso login Firebase dell'app
-// (token Bearer), come le altre funzioni protette del progetto.
-const CLASSIFY_ENDPOINT = "https://europe-west1-gama-service.cloudfunctions.net/classificaDocumentoAI";
-const CONFIDENCE_MINIMA = 0.55; // sotto questa soglia si passa alla lettura "profonda" del file
-const DIMENSIONE_MAX_LETTURA_PROFONDA = 15 * 1024 * 1024; // 15MB: oltre non si allega il file, si tiene il primo risultato
-
-function fileToBase64(file){
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",").pop());
-    reader.onerror = () => reject(new Error("Impossibile leggere il file"));
-    reader.readAsDataURL(file);
-  });
-}
-function isLeggibileDallIA(file){
-  const ext = (file.name.split(".").pop() || "").toLowerCase();
-  return ["pdf","jpg","jpeg","png","webp","heic"].includes(ext);
+function normalizzaNome(s){
+  return String(s || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // toglie accenti
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
-async function chiamaClassificazione(payload){
-  const idToken = await auth.currentUser.getIdToken();
-  const resp = await fetch(CLASSIFY_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + idToken },
-    body: JSON.stringify(payload)
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok || !data.ok) throw new Error((data && data.error) || ("Errore classificazione (" + resp.status + ")"));
-  return data;
-}
+// Trova (o crea) la categoria corrispondente al nome della cartella di primo
+// livello. Match esatto sul nome normalizzato, poi match "contiene" in
+// entrambe le direzioni (es. cartella "F-GAS" combacia con categoria
+// "F-GAS (Attestati / Tesserini)"). Se non trova nulla, crea una categoria
+// nuova con lo stesso nome della cartella.
+async function trovaOCreaCategoriaPerCartella(nomeCartella){
+  const norm = normalizzaNome(nomeCartella);
+  if (!norm) return "altro";
+  const cats = getAllCategories();
 
-// Ritorna { categoryId, personName }. Prima passata economica (solo nome +
-// percorso); se l'IA non è sicura e il file è leggibile (pdf/immagine e non
-// troppo grande), seconda passata in cui il file viene aperto e letto davvero.
-// Se nessuna categoria esistente va bene, l'IA può proporne una nuova
-// (result.newCategoryName) invece di forzare tutto dentro "Altro": in quel
-// caso la creiamo al volo, con lo stesso nome che userebbe una cartella.
-async function classifyFile(file, folderPath){
-  const categories = getAllCategories().map(c => ({ id: c.id, name: c.name }));
-  let result;
+  let match = cats.find(c => normalizzaNome(c.name) === norm);
+  if (!match) {
+    match = cats.find(c => {
+      const cn = normalizzaNome(c.name);
+      return cn && (cn.includes(norm) || norm.includes(cn));
+    });
+  }
+  if (match) return match.id;
+
   try {
-    result = await chiamaClassificazione({ fileName: file.name, folderPath, categories });
+    return await creaCategoriaSeNonEsiste(nomeCartella.trim(), "📁");
   } catch(e){
-    console.error("Errore classificazione (veloce) per " + file.name, e);
-    result = { categoryId: "altro", newCategoryName: null, personName: null, confidence: 0 };
+    console.error("Errore creazione categoria automatica \"" + nomeCartella + "\"", e);
+    return "altro";
   }
-
-  const incerta = (result.confidence == null || result.confidence < CONFIDENCE_MINIMA || !result.personName);
-  if (incerta && isLeggibileDallIA(file) && file.size <= DIMENSIONE_MAX_LETTURA_PROFONDA){
-    try {
-      const fileBase64 = await fileToBase64(file);
-      const deep = await chiamaClassificazione({ fileName: file.name, folderPath, categories, fileBase64, mimeType: file.type || "" });
-      result = deep;
-    } catch(e){
-      console.error("Errore classificazione (lettura profonda) per " + file.name, e);
-      // tiene il risultato della prima passata, meglio di niente
-    }
-  }
-
-  let categoryId = result.categoryId || null;
-  const validIds = getAllCategories().map(c => c.id);
-  if (categoryId && !validIds.includes(categoryId)) categoryId = null;
-  if (!categoryId && result.newCategoryName){
-    try {
-      categoryId = await creaCategoriaSeNonEsiste(result.newCategoryName, "📁");
-    } catch(e){
-      console.error("Errore creazione categoria automatica \"" + result.newCategoryName + "\"", e);
-    }
-  }
-  if (!categoryId) categoryId = "altro";
-
-  return {
-    categoryId,
-    personName: (result.personName && String(result.personName).trim()) || null
-  };
 }
 
 function extractYear(text){
@@ -385,31 +338,40 @@ async function runFolderImport(entries){
 
   let processed = 0, errors = 0, saltatiDoppioni = 0;
 
-  // 1) FASE ANALISI: per ogni file, chiede all'IA categoria + nome persona
-  //    (percorso completo, non solo la cartella immediata), e ricava l'anno
-  //    dal percorso stesso (es. "CUD 2025" -> 2025) con una semplice regola,
-  //    senza bisogno dell'IA per quello.
+  // 1) FASE ANALISI: la cartella di primo livello del percorso diventa la
+  //    sezione (creata se non esiste ancora); la cartella più interna (se
+  //    c'è, es. dentro ARTIGIANI/OLEG/BILIANSKI IVAN/...) diventa il nome
+  //    del documento/persona; l'anno viene letto dal percorso stesso (es.
+  //    "CUD 2025" -> 2025). Nessuna chiamata esterna: tutto deterministico,
+  //    la struttura dello zip viene rispecchiata così com'è.
+  const cacheCategoriaCartella = new Map(); // nome cartella top-level -> categoryId (evita richieste ripetute per lo stesso nome)
   const groups = new Map(); // chiave "categoria||persona||anno" -> { categoryId, personName, year, files:[File,...] }
   for (const { file, relPath } of entries){
     const parts = relPath.split("/");
     const dirParts = parts.slice(0, -1);
-    const folderPath = dirParts.join(" / ");
-    hint.textContent = `🤖 Analisi IA (${processed + 1}/${totalFiles}): ${relPath}`;
+    hint.textContent = `📂 Analisi (${processed + 1}/${totalFiles}): ${relPath}`;
 
-    let categoryId = "altro", personName = null;
-    try {
-      const result = await classifyFile(file, folderPath);
-      categoryId = result.categoryId;
-      personName = result.personName;
-    } catch(e){
-      console.error("Errore classificazione per " + relPath, e);
-      errors++;
+    let categoryId = "altro";
+    if (dirParts.length > 0){
+      const topFolder = dirParts[0];
+      const normTop = normalizzaNome(topFolder);
+      if (cacheCategoriaCartella.has(normTop)){
+        categoryId = cacheCategoriaCartella.get(normTop);
+      } else {
+        try {
+          categoryId = await trovaOCreaCategoriaPerCartella(topFolder);
+        } catch(e){
+          console.error("Errore determinazione categoria per cartella " + topFolder, e);
+          errors++;
+        }
+        cacheCategoriaCartella.set(normTop, categoryId);
+      }
     }
-    // Se l'IA non è riuscita a determinare la persona, ripiega sulla cartella
-    // più interna (o sul nome del file senza estensione se non ci sono cartelle)
-    if (!personName){
-      personName = dirParts.length ? dirParts[dirParts.length - 1] : stripExtension(file.name);
-    }
+
+    // Nome persona/documento: la cartella più interna (diversa dalla top-level,
+    // così non usiamo il nome della sezione stessa come nome documento), oppure
+    // il nome del file senza estensione se il file è direttamente nella sezione.
+    let personName = (dirParts.length > 1) ? dirParts[dirParts.length - 1] : stripExtension(file.name);
     const year = extractYear(relPath);
 
     const key = categoryId + "||" + personName.trim().toLowerCase() + "||" + (year || "");
@@ -500,8 +462,9 @@ function stripExtension(fileName){
 // ---------- ELIMINA TUTTI I DOCUMENTI (ripartenza pulita) ----------
 async function deleteAllDocuments(){
   const total = allDocs.length;
-  if (total === 0){ alert("Non ci sono documenti da eliminare."); return; }
-  const typed = prompt(`Stai per eliminare DEFINITIVAMENTE tutti i ${total} documenti (attivi + cestino) e i relativi file su Cloudinary.\nQuesta operazione NON è reversibile.\n\nScrivi CANCELLA per confermare:`);
+  const totalCustomCats = customCategories.length;
+  if (total === 0 && totalCustomCats === 0){ alert("Non c'è nulla da eliminare."); return; }
+  const typed = prompt(`Stai per eliminare DEFINITIVAMENTE tutti i ${total} documenti (attivi + cestino), i relativi file su Cloudinary, e tutte le ${totalCustomCats} sezioni personalizzate create finora (le sezioni di base restano, pronte per essere riempite da zero).\nQuesta operazione NON è reversibile.\n\nScrivi CANCELLA per confermare:`);
   if (typed !== "CANCELLA") { alert("Operazione annullata."); return; }
 
   const progressWrap = document.getElementById("importProgress");
@@ -511,8 +474,9 @@ async function deleteAllDocuments(){
 
   const docsToDelete = allDocs.slice();
   let done = 0, errors = 0;
+  const totalSteps = docsToDelete.length + totalCustomCats;
   for (const d of docsToDelete){
-    hint.textContent = `🗑️ Eliminazione ${done + 1} di ${docsToDelete.length}: ${d.name || d.id}`;
+    hint.textContent = `🗑️ Eliminazione documento ${done + 1} di ${docsToDelete.length}: ${d.name || d.id}`;
     try {
       for (const f of docFiles(d)){
         await deleteFromCloudinary(f.url).catch(e => console.warn("Cloudinary delete warning:", e.message));
@@ -523,11 +487,28 @@ async function deleteAllDocuments(){
       errors++;
     }
     done++;
-    bar.style.width = Math.round((done / docsToDelete.length) * 100) + "%";
+    bar.style.width = Math.round((done / (totalSteps || 1)) * 100) + "%";
   }
+
+  // Ricrea le sezioni da zero: elimina tutte le categorie personalizzate,
+  // così restano solo quelle di base (già allineate allo screenshot).
+  for (const c of customCategories.slice()){
+    hint.textContent = `🔄 Rimozione sezione personalizzata: ${c.name}`;
+    try {
+      await db.collection(CUSTOM_CATEGORIES_COLLECTION).doc(c.id).delete();
+    } catch(e){
+      console.error("Errore eliminazione categoria " + c.id, e);
+      errors++;
+    }
+    done++;
+    bar.style.width = Math.round((done / (totalSteps || 1)) * 100) + "%";
+  }
+  customCategories = [];
+  categorieAppenaCreate.clear();
+
   progressWrap.style.display = "none";
   bar.style.width = "0%";
-  alert(errors > 0 ? `Eliminati ${done - errors} documenti, ${errors} errori.` : `Tutti i ${done} documenti sono stati eliminati.`);
+  alert(errors > 0 ? `Eliminati ${done - errors} elementi, ${errors} errori.` : `Tutto eliminato: documenti e sezioni personalizzate. Le sezioni di base sono pronte da riempire da zero.`);
 }
 
 // ---------- DRAG & DROP CARTELLE ----------

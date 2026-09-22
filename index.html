@@ -116,13 +116,13 @@
       <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="importFolder(this.files)">
       <button class="back-btn" onclick="document.getElementById('zipInput').click()" title="Carica uno o più file ZIP contenenti le cartelle">📦 Importa ZIP</button>
       <input type="file" id="zipInput" accept=".zip" multiple style="display:none" onchange="importZipInput(this.files)">
-      <button class="back-btn" onclick="deleteAllDocuments()" style="background:rgba(229,62,62,.3);" title="Elimina definitivamente tutti i documenti">⚠️ Elimina tutto</button>
+      <button class="back-btn" onclick="deleteAllDocuments()" style="background:rgba(229,62,62,.3);" title="Elimina tutti i documenti e le sezioni personalizzate, per ripartire da zero">🔄 Reset totale</button>
       <button class="back-btn" onclick="doLogout()">Esci</button>
     </div>
   </header>
   <div id="dropOverlay" style="display:none; position:fixed; inset:0; background:rgba(30,58,95,.85); z-index:200; align-items:center; justify-content:center; color:#fff; font-size:20px; font-weight:600; pointer-events:none; flex-direction:column; gap:10px;">
     <div style="font-size:50px;">📁⬇️</div>
-    Rilascia qui la cartella per importarla — l'IA la analizza e la smista da sola
+    Rilascia qui la cartella o lo ZIP: le sottocartelle diventano sezioni, con i file dentro
   </div>
   <main>
     <div id="importProgress" style="display:none; margin-bottom:14px;">
