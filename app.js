@@ -207,22 +207,17 @@ function normalizzaNome(s){
 }
 
 // Trova (o crea) la categoria corrispondente al nome della cartella di primo
-// livello. Match esatto sul nome normalizzato, poi match "contiene" in
-// entrambe le direzioni (es. cartella "F-GAS" combacia con categoria
-// "F-GAS (Attestati / Tesserini)"). Se non trova nulla, crea una categoria
-// nuova con lo stesso nome della cartella.
+// livello. Rispecchia la cartella COSÌ COM'È: solo un nome IDENTICO (ignorando
+// maiuscole/minuscole, accenti e spazi doppi) viene riusato; per qualunque
+// altro nome di cartella viene creata una categoria nuova con quello stesso
+// nome, invece di infilarla a forza dentro una categoria "simile" già
+// esistente. Così ogni cartella dello zip diventa la propria sezione.
 async function trovaOCreaCategoriaPerCartella(nomeCartella){
   const norm = normalizzaNome(nomeCartella);
   if (!norm) return "altro";
   const cats = getAllCategories();
 
-  let match = cats.find(c => normalizzaNome(c.name) === norm);
-  if (!match) {
-    match = cats.find(c => {
-      const cn = normalizzaNome(c.name);
-      return cn && (cn.includes(norm) || norm.includes(cn));
-    });
-  }
+  const match = cats.find(c => normalizzaNome(c.name) === norm);
   if (match) return match.id;
 
   try {
