@@ -906,9 +906,9 @@ async function deleteCurrentDoc(){
 }
 
 // ---------- CLOUDINARY UPLOAD ----------
-function uploadToCloudinary(file){
+function uploadToCloudinaryComeTipo(file, resourceType){
   return new Promise((resolve, reject) => {
-    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
@@ -929,12 +929,28 @@ function uploadToCloudinary(file){
         const res = JSON.parse(xhr.responseText);
         resolve({ url: res.secure_url });
       } else {
-        reject(new Error("Upload fallito (" + xhr.status + ")"));
+        let dettaglio = "";
+        try { dettaglio = JSON.parse(xhr.responseText).error.message; } catch(e){}
+        reject(new Error("Upload fallito (" + xhr.status + ")" + (dettaglio ? ": " + dettaglio : "")));
       }
     };
     xhr.onerror = () => { progressWrap.style.display = "none"; reject(new Error("Errore di rete durante l'upload")); };
     xhr.send(formData);
   });
+}
+// Prova prima con "auto" (va bene per la maggior parte dei file); se Cloudinary
+// rifiuta con 400 (capita spesso su PDF/Word/zip per via delle restrizioni di
+// sicurezza sui file non-immagine) riprova come "raw", che non ha quei limiti.
+async function uploadToCloudinary(file){
+  try {
+    return await uploadToCloudinaryComeTipo(file, "auto");
+  } catch(e){
+    if (/^Upload fallito \(400/.test(e.message)){
+      console.warn(`Upload "auto" fallito per ${file.name} (${e.message}), riprovo come "raw"...`);
+      return await uploadToCloudinaryComeTipo(file, "raw");
+    }
+    throw e;
+  }
 }
 
 // ---------- CLOUDINARY DELETE (signed) ----------
