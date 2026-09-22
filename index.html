@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sicurezza Clienti - Gama Service</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#1e3a5f">
+<style>
+  :root{
+    --primary:#1e3a5f; --primary-light:#2c5282; --accent:#3182ce;
+    --green:#38a169; --yellow:#d69e2e; --red:#e53e3e; --gray:#718096;
+    --bg:#f4f6f9; --card:#ffffff; --border:#e2e8f0; --text:#1a202c;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; background:var(--bg); color:var(--text);}
+  header{background:var(--primary); color:#fff; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; box-shadow:0 2px 8px rgba(0,0,0,.15);}
+  header h1{font-size:18px; font-weight:600; display:flex; align-items:center; gap:10px;}
+  header .back-btn{background:rgba(255,255,255,.15); border:none; color:#fff; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px;}
+  header .back-btn:hover{background:rgba(255,255,255,.25);}
+  main{max-width:1200px; margin:0 auto; padding:20px;}
+
+  /* login */
+  #loginScreen{display:flex; align-items:center; justify-content:center; min-height:80vh;}
+  .login-box{background:var(--card); padding:36px; border-radius:16px; box-shadow:0 4px 20px rgba(0,0,0,.08); width:340px; text-align:center;}
+  .login-box h2{margin-bottom:20px; color:var(--primary);}
+  .login-box input{width:100%; padding:12px; margin-bottom:12px; border:1px solid var(--border); border-radius:8px; font-size:15px;}
+  .login-box button{width:100%; padding:12px; background:var(--accent); color:#fff; border:none; border-radius:8px; font-size:15px; cursor:pointer; font-weight:600;}
+  .login-box button:hover{background:var(--primary-light);}
+  .login-error{color:var(--red); font-size:13px; margin-top:8px; min-height:18px;}
+
+  /* dashboard cards */
+  .stats-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:24px;}
+  .stat-card{background:var(--card); border-radius:12px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.06); text-align:center;}
+  .stat-card .num{font-size:28px; font-weight:700;}
+  .stat-card .lbl{font-size:12px; color:var(--gray); margin-top:4px; text-transform:uppercase; letter-spacing:.5px;}
+  .stat-card.green .num{color:var(--green);} .stat-card.yellow .num{color:var(--yellow);} .stat-card.red .num{color:var(--red);}
+
+  .cat-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px;}
+  .cat-card{background:var(--card); border-radius:14px; padding:20px; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.06); transition:.15s; position:relative; border:1px solid var(--border);}
+  .cat-card:hover{transform:translateY(-3px); box-shadow:0 6px 16px rgba(0,0,0,.1);}
+  .cat-card .icon{font-size:34px; margin-bottom:10px;}
+  .cat-card .name{font-weight:600; font-size:15px; margin-bottom:6px; line-height:1.3;}
+  .cat-card .count{font-size:12px; color:var(--gray);}
+  .cat-card .badge{position:absolute; top:14px; right:14px; background:var(--red); color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px;}
+
+  /* doc list */
+  .toolbar{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center;}
+  .toolbar input[type=text]{flex:1; min-width:180px; padding:10px 14px; border:1px solid var(--border); border-radius:8px; font-size:14px;}
+  .toolbar select{padding:10px; border:1px solid var(--border); border-radius:8px; font-size:14px;}
+  .btn{padding:10px 18px; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;}
+  .btn-primary{background:var(--accent); color:#fff;} .btn-primary:hover{background:var(--primary-light);}
+  .btn-ghost{background:#fff; color:var(--primary); border:1px solid var(--border);}
+
+  table{width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06);}
+  th{background:#f8fafc; text-align:left; padding:12px 14px; font-size:12px; text-transform:uppercase; color:var(--gray); letter-spacing:.4px; border-bottom:1px solid var(--border);}
+  td{padding:12px 14px; border-bottom:1px solid var(--border); font-size:14px; vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover{background:#fafbfc;}
+  .status-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px;}
+  .status-dot.ok{background:var(--green);} .status-dot.warn{background:var(--yellow);} .status-dot.expired{background:var(--red);} .status-dot.na{background:var(--gray);}
+  .row-actions{display:flex; gap:6px;}
+  .icon-btn{background:none; border:1px solid var(--border); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:13px;}
+  .icon-btn:hover{background:#f0f4f8;}
+
+  .empty-state{text-align:center; padding:60px 20px; color:var(--gray);}
+  .empty-state .emoji{font-size:44px; margin-bottom:10px;}
+
+  /* modal */
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center; padding:16px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff; border-radius:14px; padding:26px; width:100%; max-width:460px; max-height:90vh; overflow-y:auto;}
+  .modal h3{margin-bottom:18px; color:var(--primary);}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#4a5568;}
+  .field input, .field select{width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; font-size:14px;}
+  .field .hint{font-size:12px; color:var(--gray); margin-top:4px;}
+  .modal-actions{display:flex; gap:10px; margin-top:20px;}
+  .modal-actions .btn{flex:1;}
+  .btn-danger{background:#fff; color:var(--red); border:1px solid var(--red);}
+  .upload-progress{height:6px; background:#e2e8f0; border-radius:4px; overflow:hidden; margin-top:10px; display:none;}
+  .upload-progress .bar{height:100%; background:var(--accent); width:0%; transition:.2s;}
+
+  .fab{position:fixed; bottom:26px; right:26px; width:58px; height:58px; border-radius:50%; background:var(--accent); color:#fff; border:none; font-size:28px; box-shadow:0 4px 14px rgba(0,0,0,.25); cursor:pointer; z-index:40;}
+  .fab:hover{background:var(--primary-light);}
+
+  @media(max-width:640px){
+    table, thead, tbody, th, td, tr{display:block;}
+    thead{display:none;}
+    tr{background:#fff; margin-bottom:12px; border-radius:10px; padding:10px 14px; box-shadow:0 1px 4px rgba(0,0,0,.06);}
+    td{border:none; padding:6px 0; display:flex; justify-content:space-between; gap:10px;}
+    td::before{content:attr(data-label); font-weight:600; color:var(--gray); font-size:12px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-box">
+    <h2>🔒 Sicurezza Clienti</h2>
+    <input type="email" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPass" placeholder="Password">
+    <button onclick="doLogin()">Accedi</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appScreen" style="display:none;">
+  <header>
+    <h1><span id="headerBack" style="display:none; cursor:pointer;">←</span> <span id="headerTitle">🔒 Sicurezza Clienti</span></h1>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <button class="back-btn" onclick="document.getElementById('folderInput').click()" title="Trascina una cartella sulla pagina, oppure clicca qui per selezionarla">📁 Importa cartella</button>
+      <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="importFolder(this.files)">
+      <button class="back-btn" onclick="document.getElementById('zipInput').click()" title="Carica uno o più file ZIP contenenti le cartelle">📦 Importa ZIP</button>
+      <input type="file" id="zipInput" accept=".zip" multiple style="display:none" onchange="importZipInput(this.files)">
+      <button class="back-btn" onclick="deleteAllDocuments()" style="background:rgba(229,62,62,.3);" title="Elimina definitivamente tutti i documenti">⚠️ Elimina tutto</button>
+      <button class="back-btn" onclick="doLogout()">Esci</button>
+    </div>
+  </header>
+  <div id="dropOverlay" style="display:none; position:fixed; inset:0; background:rgba(30,58,95,.85); z-index:200; align-items:center; justify-content:center; color:#fff; font-size:20px; font-weight:600; pointer-events:none; flex-direction:column; gap:10px;">
+    <div style="font-size:50px;">📁⬇️</div>
+    Rilascia qui la cartella per importarla — l'IA la analizza e la smista da sola
+  </div>
+  <main>
+    <div id="importProgress" style="display:none; margin-bottom:14px;">
+      <div class="upload-progress" style="display:block;"><div class="bar" id="importBar"></div></div>
+      <div class="hint" id="importHint" style="margin-top:6px;"></div>
+    </div>
+    <div id="dashboardView">
+      <div class="stats-row" id="statsRow"></div>
+      <div class="cat-grid" id="catGrid"></div>
+    </div>
+
+    <div id="categoryView" style="display:none;">
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="Cerca per nome dipendente/cliente..." oninput="renderDocs()">
+        <select id="filterStatus" onchange="renderDocs()">
+          <option value="">Tutti gli stati</option>
+          <option value="ok">Valido</option>
+          <option value="warn">In scadenza</option>
+          <option value="expired">Scaduto</option>
+        </select>
+      </div>
+      <div id="docsTableWrap"></div>
+    </div>
+  </main>
+  <button class="fab" id="fabAdd" onclick="openDocModal()" title="Aggiungi documento">+</button>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Nuovo documento</h3>
+    <div class="field">
+      <label>Nome dipendente / cliente</label>
+      <input type="text" id="fName" placeholder="Es. Mario Rossi">
+    </div>
+    <div class="field">
+      <label>Categoria</label>
+      <select id="fCategory"></select>
+    </div>
+    <div class="field">
+      <label>Data emissione documento</label>
+      <input type="date" id="fIssueDate">
+      <div class="hint" id="expiryHint"></div>
+    </div>
+    <div class="field">
+      <label>Data scadenza (override manuale, opzionale)</label>
+      <input type="date" id="fExpiryOverride">
+    </div>
+    <div class="field">
+      <label>Note</label>
+      <input type="text" id="fNotes" placeholder="Note aggiuntive (opzionale)">
+    </div>
+    <div class="field">
+      <label>File documento (puoi aggiungerne più di uno)</label>
+      <input type="file" id="fFile" multiple>
+      <div class="upload-progress" id="uploadProgress"><div class="bar" id="uploadBar"></div></div>
+      <div class="hint" id="currentFileHint"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDocModal()">Annulla</button>
+      <button class="btn btn-danger" id="deleteBtn" style="display:none;" onclick="deleteCurrentDoc()">Elimina</button>
+      <button class="btn btn-primary" onclick="saveDoc()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="config.js"></script>
+<script src="categories.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
