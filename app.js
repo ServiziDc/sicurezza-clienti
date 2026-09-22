@@ -70,12 +70,29 @@ async function addCustomCategory(){
   const name = prompt("Nome della nuova categoria:");
   if (!name || !name.trim()) return;
   const icon = prompt("Emoji/icona per la categoria (es. 📁):", "📁") || "📁";
-  const slug = "custom_" + name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") + "_" + Date.now().toString(36);
   try {
-    await db.collection(CUSTOM_CATEGORIES_COLLECTION).doc(slug).set({ name: name.trim(), icon, expiryMonths: null });
+    await creaCategoriaSeNonEsiste(name.trim(), icon);
   } catch(e){
     alert("Errore creazione categoria: " + e.message);
   }
+}
+
+// Usata dall'import IA: crea una categoria nuova solo se non esiste già una con
+// lo stesso nome (case-insensitive), sia tra quelle esistenti sia tra quelle
+// appena create nello stesso import (per non farne due uguali se più file dello
+// stesso tipo arrivano in parallelo durante la stessa importazione).
+const categorieAppenaCreate = new Map(); // nome normalizzato -> id, valido per la durata di un import
+async function creaCategoriaSeNonEsiste(name, icon){
+  const norm = name.trim().toLowerCase();
+  const esistente = getAllCategories().find(c => (c.name||"").trim().toLowerCase() === norm);
+  if (esistente) return esistente.id;
+  if (categorieAppenaCreate.has(norm)) return categorieAppenaCreate.get(norm);
+
+  const slug = "custom_" + name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") + "_" + Date.now().toString(36);
+  await db.collection(CUSTOM_CATEGORIES_COLLECTION).doc(slug).set({ name: name.trim(), icon: icon || "📁", expiryMonths: null });
+  customCategories.push({ id: slug, custom: true, name: name.trim(), icon: icon || "📁", expiryMonths: null }); // aggiorna subito la lista locale, senza aspettare il listener
+  categorieAppenaCreate.set(norm, slug);
+  return slug;
 }
 
 // ---------- LOAD DOCS ----------
@@ -220,6 +237,9 @@ async function chiamaClassificazione(payload){
 // Ritorna { categoryId, personName }. Prima passata economica (solo nome +
 // percorso); se l'IA non è sicura e il file è leggibile (pdf/immagine e non
 // troppo grande), seconda passata in cui il file viene aperto e letto davvero.
+// Se nessuna categoria esistente va bene, l'IA può proporne una nuova
+// (result.newCategoryName) invece di forzare tutto dentro "Altro": in quel
+// caso la creiamo al volo, con lo stesso nome che userebbe una cartella.
 async function classifyFile(file, folderPath){
   const categories = getAllCategories().map(c => ({ id: c.id, name: c.name }));
   let result;
@@ -227,7 +247,7 @@ async function classifyFile(file, folderPath){
     result = await chiamaClassificazione({ fileName: file.name, folderPath, categories });
   } catch(e){
     console.error("Errore classificazione (veloce) per " + file.name, e);
-    result = { categoryId: "altro", personName: null, confidence: 0 };
+    result = { categoryId: "altro", newCategoryName: null, personName: null, confidence: 0 };
   }
 
   const incerta = (result.confidence == null || result.confidence < CONFIDENCE_MINIMA || !result.personName);
@@ -242,8 +262,20 @@ async function classifyFile(file, folderPath){
     }
   }
 
+  let categoryId = result.categoryId || null;
+  const validIds = getAllCategories().map(c => c.id);
+  if (categoryId && !validIds.includes(categoryId)) categoryId = null;
+  if (!categoryId && result.newCategoryName){
+    try {
+      categoryId = await creaCategoriaSeNonEsiste(result.newCategoryName, "📁");
+    } catch(e){
+      console.error("Errore creazione categoria automatica \"" + result.newCategoryName + "\"", e);
+    }
+  }
+  if (!categoryId) categoryId = "altro";
+
   return {
-    categoryId: result.categoryId || "altro",
+    categoryId,
     personName: (result.personName && String(result.personName).trim()) || null
   };
 }
